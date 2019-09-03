@@ -1,0 +1,314 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE script:module PUBLIC "-//OpenOffice.org//DTD OfficeDocument 1.0//EN" "module.dtd">
+<script:module xmlns:script="http://openoffice.org/2000/script" script:name="BasicCode" script:language="StarBasic" script:moduleType="normal">REM  *****  BASIC  *****
+
+Public NUM_LAND_USES, NUM_LAND_COVERS, INPUT_TABLE_ANCHOR_SOURCE_ROW, INPUT_TABLE_ANCHOR_SOURCE_COL, INPUT_TABLE_ANCHOR_TARGET_ROW, INPUT_TABLE_ANCHOR_TARGET_COL, INPUT_AREA_SQ_MI_ROW, INPUT_AREA_SQ_MI_COL  As Integer
+Public OUTPUT_FOLDER, IMAGE_EXPORT_FILE_TYPE, SUMMARY_TABLE_NAME, SUMMARY_TABLE_SHEET_NAME As String
+Public CHART_NAMES As Variant
+
+Dim oDialog as Object
+
+
+Sub ShowDialog
+	&apos; UPDATE THESE IF THE INPUT TABLE CHANGES LOCATION OR DIMENSION
+	INPUT_TABLE_ANCHOR_SOURCE_ROW=1
+	INPUT_TABLE_ANCHOR_SOURCE_COL=1
+	INPUT_TABLE_ANCHOR_TARGET_ROW=1
+	INPUT_TABLE_ANCHOR_TARGET_COL=0
+	&apos; UPDATE THESE IF THE AREA_SQ_MI CELL CHANGES LOCATION
+	INPUT_AREA_SQ_MI_ROW = 15
+	INPUT_AREA_SQ_MI_COL = 10
+	&apos; IMAGE EXPORT FILE TYPE (eg. png or jpg)
+	IMAGE_EXPORT_FILE_TYPE = &quot;jpg&quot;
+	
+	NUM_LAND_USES = 13
+	NUM_LAND_COVERS = 7
+	SUMMARY_TABLE_SHEET_NAME = &quot;SummaryTable&quot;
+	&apos; Hard coded output names - chart names are order dependent
+	OUTPUT_FOLDER = &quot;C:\Temp\BasicOutput&quot;
+	CHART_NAMES = Array (_
+		&quot;Area&quot;, _ 
+		&quot;Percent_abunance&quot;, _ 
+		&quot;Plantable_space_area&quot;, _ 
+		&quot;Plantable_space_percentage&quot;, _ 
+		&quot;Pie_charts_1&quot;, _ 
+		&quot;Pie_charts_2&quot;)
+	SUMMARY_TABLE_NAME = &quot;Summary_Table&quot;
+		
+	BasicLibraries.LoadLibrary(&quot;Tools&quot;)
+	oDialog = LoadDialog(&quot;CanopySummaryChartGenerator&quot;, &quot;InputDialog&quot;)
+	oDialog.Execute()
+End Sub
+
+Sub ReadDialog()
+	Dim fileName As String
+	Dim area_sq_mi As Double
+	&apos; Get the input parameters from the dialog
+	fileName = CheckFileName (oDialog)
+	areaSqMi = CheckAreaSqMi (oDialog)
+	&apos; The input is OK. Close the dialog then do the work
+	oDialog.endExecute()						
+	UpdateDataTable(fileName)	
+	UpdateChartDataRanges
+	UpdateAreaSqMi(areaSqMi)
+	WriteCharts
+	ExportTable
+	MsgBox &quot;Exported images are in &quot; + OUTPUT_FOLDER
+End Sub	
+
+Function CheckFileName () as String
+	fileName = oDialog.GetControl(&quot;csv_file&quot;).Text
+	if fileName = &quot;&quot; or not FileExists(fileName) then
+		MsgBox (&quot;Invalid file name: &quot; + fileName)
+		Stop
+	end if	
+	CheckFileName = fileName
+End Function 
+
+
+Function CheckAreaSqMi () as String
+	areaSqMi = oDialog.GetControl(&quot;area_sq_mi&quot;).Value
+	if not IsNumeric(areaSqMi) or areaSqMi &lt;= 0 then
+		MsgBox (&quot;Invalid value for area: &quot; + areaSqMi)
+ 		Stop
+	end if
+	CheckAreaSqMi = areaSqMi
+End Function 
+
+
+Sub UpdateDataTable (fileName as String)
+	Dim Doc As Object
+	Dim Sheet As Object
+	Dim Cell As Object
+	Dim i,j as Integer
+	Doc = ThisComponent
+	oSheet = Doc.Sheets(0)
+	
+	&apos; Clear the data table
+	for i = INPUT_TABLE_ANCHOR_TARGET_ROW to INPUT_TABLE_ANCHOR_TARGET_ROW + NUM_LAND_USES -1 
+		oRow = oSheet.getRows().getByIndex(i)
+		oRow.clearContents(1+4)
+	next
+	
+	&apos; Populate the data table with the input data 
+	num = FreeFile()
+	open fileName for input as #num
+	
+	&apos; Skip over rows beforethe anchor row
+	for i = 0 to INPUT_TABLE_ANCHOR_SOURCE_ROW - 1
+		line input #num, row  &apos;skip the first row
+	next
+	
+	&apos; Read the input table and copy each row to the target
+	For i = 0 to NUM_LAND_USES-1
+		if eof(#num) then
+			Exit Sub
+		else
+			line input #num, row
+			dim row_array(), row_values() as string
+			row_array = split(row, &quot;,&quot;,INPUT_TABLE_ANCHOR_SOURCE_COL+2)
+			row_desc = row_array(INPUT_TABLE_ANCHOR_SOURCE_COL)
+			row_values = split(row_array(INPUT_TABLE_ANCHOR_SOURCE_COL+1), &quot;,&quot;,NUM_LAND_COVERS)
+			&apos; Update first column (text)
+			oCell = oSheet.getCellByPosition(INPUT_TABLE_ANCHOR_TARGET_COL, INPUT_TABLE_ANCHOR_TARGET_ROW + i)
+			oCell.String = row_desc
+			&apos; Update the numeric columns
+			for j = 0 to NUM_LAND_COVERS - 1
+				oCell = oSheet.getCellByPosition(INPUT_TABLE_ANCHOR_TARGET_COL + j + 1, INPUT_TABLE_ANCHOR_TARGET_ROW + i)
+				oCell.Value = CLng(row_values(j))
+			Next
+		end if
+	Next
+End Sub
+
+Function getNumberOfLandUses ()
+	&apos; Return the number of land uses in the input data
+   	Dim oSheets, oSheet
+   	Dim i, num_lus as Integer
+   	oDoc = ThisComponent
+   	oSheets = oDoc.getSheets()
+   
+   	&apos; Figure out how many land uses we actually have
+   	oSheet = oDoc.Sheets(0)
+	num_lus = 0
+	for i = INPUT_TABLE_ANCHOR_TARGET_ROW to INPUT_TABLE_ANCHOR_TARGET_ROW + NUM_LAND_USES - 1
+		cell = oSheet.getCellByPosition(INPUT_TABLE_ANCHOR_TARGET_COL, i)
+	 	cell_value = oSheet.getCellByPosition(INPUT_TABLE_ANCHOR_TARGET_COL, i).String 
+		if cell_value &lt;&gt; &quot;&quot; then
+		 	num_lus = num_lus + 1
+		end if
+	next
+	getNumberOfLandUses = num_lus
+End Function
+
+
+Sub UpdateChartDataRanges
+   	Dim oSheets, oSheet, oDrawPage, oShape, oCharts, oChart
+   	Dim i, j, num_lus as Integer
+   	oDoc = ThisComponent
+   	oSheets = oDoc.getSheets()
+	
+	num_lus = GetNumberOfLandUses()
+   
+    &apos; Reduce the chart data range to reflect the actual number of land uses
+   	For i = 0 to oSheets.getCount() - 1
+	    oSheet = oSheets.getByIndex( i )
+	    if oSheet.Name &lt;&gt; &quot;PieCharts&quot; then
+		    oCharts = oSheet.getCharts()
+		    For j = 0 to oCharts.getCount() - 1
+		    	oChart = oCharts.getByIndex (j)
+		    	x = oChart.Name
+		    	oCellRangeAddress = oChart.getRanges(0)
+		    	oCellRangeAddress(0).endRow = oCellRangeAddress(0).startRow + num_lus
+		    	ochart.setRanges(oCellRangeAddress)		    	
+      		Next
+      	end if
+   	Next
+End Sub
+
+
+Sub UpdateAreaSqMi (areaSqMi)
+   	oDoc = ThisComponent
+   	oSheet = oDoc.Sheets(0)
+	oCell = oSheet.getCellByPosition(INPUT_AREA_SQ_MI_COL, INPUT_AREA_SQ_MI_ROW)
+	oCell.Value = CLng(areaSqMi)
+End Sub
+
+
+Sub WriteCharts
+   Dim oDoc, oDocCtrl, oDocFrame
+   oDoc = ThisComponent
+   oDocCtrl = oDoc.getCurrentController()
+   oDocFrame = oDocCtrl.getFrame()
+
+   nCharts = 0
+   
+   &apos; Search the draw page for the chart.
+   Dim oSheets, oSheet, oDrawPage, oShape
+   oSheets = oDoc.getSheets()
+   
+   For i = 0 to oSheets.getCount() - 1
+      oSheet = oSheets.getByIndex( i )
+      oDrawPage = oSheet.getDrawPage()
+      
+      For j = 0 to oDrawPage.getCount() - 1
+         oShape = oDrawPage.getByIndex( j )
+         &apos; Can&apos;t call supportsService unless the com.sun.star.lang.XServiceInfo is present.
+         If HasUnoInterfaces( oShape, &quot;com.sun.star.lang.XServiceInfo&quot; ) Then
+            If oShape.supportsService( &quot;com.sun.star.drawing.OLE2Shape&quot; ) Then
+               &apos; Is it a Chart?
+               If oShape.CLSID = &quot;12DCAE26-281F-416F-a234-c3086127382e&quot; Then
+                  &apos; export the chart
+                  storeUrl = ConvertToURL(OUTPUT_FOLDER + &quot;\&quot; + CHART_NAMES(nCharts) + &quot;.&quot; + IMAGE_EXPORT_FILE_TYPE)
+                  ExportSelection( oShape, storeUrl, &quot;image/&quot; + IMAGE_EXPORT_FILE_TYPE)
+                  nCharts = nCharts + 1
+               EndIf
+            EndIf
+         EndIf
+      Next
+   Next
+End Sub
+
+Sub ExportSelection( oShape As Object, url As String, mediaType As String)
+   &apos; Get an export filter object
+   Dim exportFilter
+   exportFilter = createUnoService( &quot;com.sun.star.drawing.GraphicExportFilter&quot; )
+   exportFilter.setSourceDocument( oShape )
+ 
+   &apos; Set the filter data
+   Dim aFilterData(5) As New com.sun.star.beans.PropertyValue
+   aFilterData(0).Name = &quot;Level&quot; &apos;1=PS level 1, 2=PS level 2
+   aFilterData(0).Value = 2
+   aFilterData(1).Name = &quot;ColorFormat&quot; &apos;1=color, 2=grayscale
+   aFilterData(1).Value = 1
+   aFilterData(2).Name = &quot;TextMode&quot; &apos;0=glyph outlines, 1=no glyph outlines, see ooo bug 7918
+   aFilterData(2).Value = 1
+   aFilterData(3).Name = &quot;Preview&quot; &apos;0=none, 1=TIFF, 2=EPSI, 3=TIFF+EPSI
+   aFilterData(3).Value = 0
+   aFilterData(4).Name = &quot;CompressionMode&quot; &apos;1=LZW, 2=none
+   aFilterData(4).Value = 2
+   aFilterData(5).Name = &quot;Quality&quot; 
+   aFilterData(5).Value = 100
+
+   
+   Dim aProps(2) As New com.sun.star.beans.PropertyValue
+   aProps(0).Name = &quot;MediaType&quot;
+   aProps(0).Value = mediaType
+   aProps(1).Name = &quot;URL&quot;
+   aProps(1).Value = url
+   aProps(2).Name = &quot;FilterData&quot;
+   aProps(2).Value = aFilterData()
+   
+   exportFilter.filter( aProps() )
+End Sub 
+
+
+
+Sub ExportTable ()
+	Dim args(2) as new com.sun.star.beans.PropertyValue
+	num_lus = GetNumberOfLandUses()
+	
+	&apos; Get the sheet object for the summary table
+	oSheet = ThisComponent.Sheets.getByName(SUMMARY_TABLE_SHEET_NAME)
+	ThisComponent.CurrentController.setActiveSheet(oSheet)
+	
+	&apos; Get the sheet index
+	oSheetAddr = oSheet.getRangeAddress()
+	oSheetIndex = oSheetAddr.Sheet
+		
+	&apos; To make the exported table look right for export, we need to reduce the template&apos;s
+	&apos; table to just the number of included land uses. Then before exiting
+	&apos; we need to restore those rows to preserve the template.
+	Dim unusedCellRangeAddress As New com.sun.star.table.CellRangeAddress
+	if num_lus &lt; NUM_LAND_USES then
+		&apos; Get the cells that we need to remove then restore
+		unusedCellRangeAddress.Sheet = oSheetIndex     
+		unusedCellRangeAddress.StartColumn = 0
+		unusedCellRangeAddress.StartRow = 2+num_lus
+		unusedCellRangeAddress.EndColumn = (1+2*NUM_LAND_COVERS)-1
+		unusedCellRangeAddress.EndRow = (2+NUM_LAND_USES)-1
+		&apos; Remove the unused rows	
+		oSheet.removeRange(unusedCellRangeAddress, com.sun.star.sheet.CellDeleteMode.UP)		
+	endif	
+		
+	&apos; Export updated table to PDF
+	oRange = oSheet.getCellRangeByPosition(0, 0, (1+2*NUM_LAND_COVERS)-1,(3+NUM_LAND_USES)-1)
+	ThisComponent.CurrentController.Select(oRange) 
+	args(0).Name = &quot;FilterName&quot;
+	if IMAGE_EXPORT_FILE_TYPE = &quot;png&quot; then
+		args(0).Value = &quot;calc_png_Export&quot;
+	else
+		args(0).Value = &quot;calc_jpg_Export&quot;
+	endif		
+	args(1).Name = &quot;FilterData&quot;
+	args(1).Value = Array(Array(Array(&quot;ColorMode&quot;,0,0,com.sun.star.beans.PropertyState.DIRECT_VALUE),Array(&quot;Quality&quot;,0,75,com.sun.star.beans.PropertyState.DIRECT_VALUE),Array(&quot;PixelWidth&quot;,0,981,com.sun.star.beans.PropertyState.DIRECT_VALUE),Array(&quot;PixelHeight&quot;,0,350,com.sun.star.beans.PropertyState.DIRECT_VALUE),Array(&quot;LogicalWidth&quot;,0,25952,com.sun.star.beans.PropertyState.DIRECT_VALUE),Array(&quot;LogicalHeight&quot;,0,9259,com.sun.star.beans.PropertyState.DIRECT_VALUE))
+	args(2).Name = &quot;SelectionOnly&quot;
+	args(2).Value = true	
+	ThisComponent.storeToURL(ConvertToURL(OUTPUT_FOLDER + &quot;\&quot; + SUMMARY_TABLE_NAME + &quot;.&quot; + IMAGE_EXPORT_FILE_TYPE), args())
+
+	if num_lus &lt; NUM_LAND_USES then
+		&apos; Get the object that represents the last row (we know that it has the forumlas that we want to copy)
+		Dim lastRowCellRangeAddress As New com.sun.star.table.CellRangeAddress
+		lastRowCellRangeAddress.Sheet = oSheetIndex     
+		lastRowCellRangeAddress.StartColumn = 0
+		lastRowCellRangeAddress.StartRow = 2+num_lus-1
+		lastRowCellRangeAddress.EndColumn = (1+2*NUM_LAND_COVERS)-1
+		lastRowCellRangeAddress.EndRow = 2+num_lus-1
+		&apos; Restore the unused rows (this does not restore the forumulas)
+		oSheet.insertCells(unusedCellRangeAddress, com.sun.star.sheet.CellInsertMode.DOWN)
+		&apos; Restore the forumlas in the restored rows by repeatedly copying the last row that does have the forumlas		
+		For i = 0 to NUM_LAND_USES - num_lus
+			Dim targetCellAddress As New com.sun.star.table.CellAddress
+			targetCellAddress.Sheet = oSheetIndex
+			targetCellAddress.Column = 0
+			targetCellAddress.Row = lastRowCellRangeAddress.StartRow + i + 1
+			oSheet.copyRange(targetCellAddress, lastRowCellRangeAddress)
+		Next
+	endif
+		
+
+
+End Sub
+
+
+</script:module>
