@@ -31,3 +31,10 @@ The LibreOffice macro in this repository generates a set of image files with cha
 ![Alt text](/images/screenshot_input_csv.jpg?raw=true "Input csv file")
 2. Open the template in LibreOffice Calc 
 3. Click the macro shortcut. This dialog should appear: ![Alt text](/images/screenshot_macro_dialog.jpg?raw=true "Macro dialog")
+4. Point to the input csv file and fill in the square mileage of the community then click "Import data and generate charts"
+5. You may see the data in the template being updated then finally a message to confirm the images were generated
+6. The images will be in the designated output directory ![Alt text](/images/screenshot_output_files.jpg?raw=true "Output files")
+7. You can now run the macro against another set of data or exit. When exiting it is probably best to discard any changes that the macro made to the template
+
+## Updating
+When installing an update to the macro, go through the same steps listed in the Installation section to install the extension and update the output directory. Unless there was a major change, the macro shortcut should still work. 
