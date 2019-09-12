@@ -12,7 +12,18 @@ The LibreOffice macro in this repository generates a set of image files with cha
 
 ## Installation
 1. Start LibreOffice Calc
-2. Tools -> Extension Manager -> Add
-3. Specify [path to git clone]/extensions/canopy_chart_generator.oxt and click OK
-
+2. Install the extension
+    - Tools -> Extension Manager -> Add
+    - Specify [path to git clone]/extensions/canopy_chart_generator.oxt and click OK
+3. Create a shortcut to run the macro
+    - Tools -> Customize, Toolsbar Tab
+    - Category: Macros (at the bottom of the list)
+    - Function: My Macros -> CanopySummaryChartGenerator -> BasicCode -> ShowDialog -> Click right arrow to add to Function list on right
+    - Highlight ShowDialog and modify the icon to [path to git clone]/images/tree_icon.png
+    - Highlight ShowDialog and modify the name to something more meaningful such as CanopyCharts. You should see the macro shortcut on your tool bar ![Alt text](/images/screenshot_tree_icon.jpg?raw=true "Macro shortcut")
+    
 ## Operation
+1. Generate the input csv. It should look like this (there are files in the test subdirectory that can be used for testing purposes):
+![Alt text](/images/input_csv.jpg?raw=true "Input csv file")
+2. Open the template in LibreOffice Calc 
+3. Click the macro shortcut. This dialog should appear: ![Alt text](/images/screenshot_macro_dialog_icon.jpg?raw=true "Macro dialog")
